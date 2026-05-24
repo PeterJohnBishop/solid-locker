@@ -6,6 +6,8 @@ import (
 	"database/sql"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/peterjohnbishop/solid-locker/encryption"
@@ -32,6 +34,39 @@ type Storage struct {
 // interface for database storage
 type ChunkSaver interface {
 	StoreSingleChunk(ctx context.Context, fileID string, index int, payload []byte) error
+}
+
+// initializes the database and creates tables if they don't exist
+func NewStorage(dbPath string) (*Storage, error) {
+	// DSN parameters:
+	// _fk=1 enforces foreign keys.
+	// _journal_mode=WAL improves concurrent read/write performance.
+	dsn := fmt.Sprintf("file:%s?_fk=1&_journal_mode=WAL", dbPath)
+	db, err := sql.Open("sqlite3", dsn)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open database: %w", err)
+	}
+
+	if err := db.Ping(); err != nil {
+		return nil, fmt.Errorf("failed to ping database: %w", err)
+	}
+
+	schema := `
+	CREATE TABLE IF NOT EXISTS files (id TEXT PRIMARY KEY, filename TEXT NOT NULL);
+	CREATE TABLE IF NOT EXISTS file_chunks (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		file_id TEXT NOT NULL,
+		chunk_index INTEGER NOT NULL,
+		encrypted_payload BLOB NOT NULL,
+		FOREIGN KEY(file_id) REFERENCES files(id) ON DELETE CASCADE
+	);
+	CREATE UNIQUE INDEX IF NOT EXISTS idx_file_chunk ON file_chunks(file_id, chunk_index);
+	`
+	if _, err := db.Exec(schema); err != nil {
+		return nil, fmt.Errorf("failed to create schema: %w", err)
+	}
+
+	return &Storage{db: db}, nil
 }
 
 // CreateFileRecord initializes the parent row in the database so foreign keys don't fail.
@@ -79,6 +114,7 @@ func StreamEncryptAndStore(ctx context.Context, reader io.Reader, chunkSize int,
 	return nil
 }
 
+// handleStreamingDownload streams a requested file back to the client
 func (s *Storage) StreamRetrieveAndDecrypt(ctx context.Context, fileID string, w io.Writer, masterKey []byte) error {
 	query := "SELECT encrypted_payload FROM file_chunks WHERE file_id = ? ORDER BY chunk_index ASC"
 	rows, err := s.db.QueryContext(ctx, query, fileID)
@@ -121,35 +157,55 @@ func (s *Storage) GetFilename(ctx context.Context, fileID string) (string, error
 	return filename, nil
 }
 
-// initializes the database and creates tables if they don't exist
-func NewStorage(dbPath string) (*Storage, error) {
-	// DSN parameters:
-	// _fk=1 enforces foreign keys.
-	// _journal_mode=WAL improves concurrent read/write performance.
-	dsn := fmt.Sprintf("file:%s?_fk=1&_journal_mode=WAL", dbPath)
-	db, err := sql.Open("sqlite3", dsn)
+// UploadLocalFile reads a file from disk, encrypts it, and stores it in SQLite
+func UploadLocalFile(ctx context.Context, filePath string, db *Storage, masterKey []byte) (string, error) {
+	file, err := os.Open(filePath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open database: %w", err)
+		return "", fmt.Errorf("failed to open local file: %w", err)
+	}
+	defer file.Close()
+
+	fileID, err := GenerateUUIDv4()
+	if err != nil {
+		return "", fmt.Errorf("failed to generate UUID: %w", err)
+	}
+	filename := filepath.Base(filePath)
+	chunkSize := 2 * 1024 * 1024
+
+	if err := db.CreateFileRecord(ctx, fileID, filename); err != nil {
+		return "", fmt.Errorf("failed to create db record: %w", err)
 	}
 
-	if err := db.Ping(); err != nil {
-		return nil, fmt.Errorf("failed to ping database: %w", err)
+	err = StreamEncryptAndStore(ctx, file, chunkSize, masterKey, fileID, db)
+	if err != nil {
+		return "", fmt.Errorf("failed to encrypt and store: %w", err)
 	}
 
-	schema := `
-	CREATE TABLE IF NOT EXISTS files (id TEXT PRIMARY KEY, filename TEXT NOT NULL);
-	CREATE TABLE IF NOT EXISTS file_chunks (
-		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		file_id TEXT NOT NULL,
-		chunk_index INTEGER NOT NULL,
-		encrypted_payload BLOB NOT NULL,
-		FOREIGN KEY(file_id) REFERENCES files(id) ON DELETE CASCADE
-	);
-	CREATE UNIQUE INDEX IF NOT EXISTS idx_file_chunk ON file_chunks(file_id, chunk_index);
-	`
-	if _, err := db.Exec(schema); err != nil {
-		return nil, fmt.Errorf("failed to create schema: %w", err)
+	return fileID, nil
+}
+
+// DownloadLocalFile extracts a file from SQLite, decrypts it, and writes it to a local path
+func DownloadLocalFile(ctx context.Context, fileID string, outputDir string, db *Storage, masterKey []byte) error {
+	filename, err := db.GetFilename(ctx, fileID)
+	if err != nil {
+		return fmt.Errorf("file not found in DB: %w", err)
 	}
 
-	return &Storage{db: db}, nil
+	destinationPath := filepath.Join(outputDir, filename)
+	file, err := os.Create(destinationPath)
+	if err != nil {
+		return fmt.Errorf("failed to create destination file: %w", err)
+	}
+	defer file.Close()
+
+	err = db.StreamRetrieveAndDecrypt(ctx, fileID, file, masterKey)
+	if err != nil {
+		return fmt.Errorf("failed to decrypt and retrieve: %w", err)
+	}
+
+	if err := file.Sync(); err != nil {
+		return fmt.Errorf("failed to sync file to disk: %w", err)
+	}
+
+	return nil
 }
