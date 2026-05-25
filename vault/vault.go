@@ -31,6 +31,11 @@ type Storage struct {
 	db *sql.DB
 }
 
+type VaultFile struct {
+	ID       string
+	Filename string
+}
+
 // interface for database storage
 type ChunkSaver interface {
 	StoreSingleChunk(ctx context.Context, fileID string, index int, payload []byte) error
@@ -158,27 +163,26 @@ func (s *Storage) GetFilename(ctx context.Context, fileID string) (string, error
 }
 
 // retrieves a list of all filenames stored in the database.
-func (s *Storage) GetAllFileNames(ctx context.Context) ([]string, error) {
-	rows, err := s.db.QueryContext(ctx, "SELECT filename FROM files")
+func (s *Storage) GetAllFiles(ctx context.Context) ([]VaultFile, error) {
+	rows, err := s.db.QueryContext(ctx, "SELECT id, filename FROM files")
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	var filenames []string
+	var files []VaultFile
 	for rows.Next() {
-		var filename string
-		if err := rows.Scan(&filename); err != nil {
+		var f VaultFile
+		if err := rows.Scan(&f.ID, &f.Filename); err != nil {
 			return nil, err
 		}
-		filenames = append(filenames, filename)
+		files = append(files, f)
 	}
 
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-
-	return filenames, nil
+	return files, nil
 }
 
 // removes a specific file record from the database based on its ID.

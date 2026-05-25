@@ -8,6 +8,7 @@ import (
 	"syscall"
 	"time"
 
+	"charm.land/bubbles/v2/filepicker"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/wish/v2"
 	bm "charm.land/wish/v2/bubbletea"
@@ -18,10 +19,14 @@ import (
 
 func StartSSHServer(storage *vault.Storage) {
 	teaHandler := func(s ssh.Session) (tea.Model, []tea.ProgramOption) {
-		m := model{
-			storage: storage,
-		}
+		fp := filepicker.New()
+		fp.CurrentDirectory, _ = os.Getwd()
+		fp.SetHeight(7)
 
+		m := model{
+			storage:    storage,
+			filepicker: fp,
+		}
 		return m, nil
 	}
 
