@@ -3,7 +3,8 @@ package tui
 import (
 	"context"
 	"fmt"
-	"os"
+
+	// "os"
 	"strings"
 	"time"
 
@@ -107,22 +108,37 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.cursor--
 				}
 
+			// case "d":
+			// 	if len(m.files) > 0 {
+			// 		selectedVaultFile := m.files[m.cursor]
+			// 		m.message = fmt.Sprintf("Decrypting %s...", selectedVaultFile.Filename)
+
+			// 		return m, func() tea.Msg {
+			// 			ctx := context.Background()
+			// 			cwd, _ := os.Getwd()
+
+			// 			err := vault.DownloadLocalFile(ctx, selectedVaultFile.ID, cwd, m.storage, encryption.SaltMaster)
+			// 			if err != nil {
+			// 				return errorMsg{err}
+			// 			}
+
+			// 			return successMsg{fmt.Sprintf("Successfully extracted: %s", selectedVaultFile.Filename)}
+			// 		}
+			// 	}
 			case "d":
 				if len(m.files) > 0 {
 					selectedVaultFile := m.files[m.cursor]
-					m.message = fmt.Sprintf("Decrypting %s...", selectedVaultFile.Filename)
 
-					return m, func() tea.Msg {
-						ctx := context.Background()
-						cwd, _ := os.Getwd()
+					// Generate the exact native SSH command
+					cmdStr := fmt.Sprintf("ssh -p 23234 localhost get %s > \"%s\"",
+						selectedVaultFile.ID,
+						selectedVaultFile.Filename,
+					)
 
-						err := vault.DownloadLocalFile(ctx, selectedVaultFile.ID, cwd, m.storage, encryption.SaltMaster)
-						if err != nil {
-							return errorMsg{err}
-						}
+					m.message = "Download command copied to your local clipboard!"
 
-						return successMsg{fmt.Sprintf("Successfully extracted: %s", selectedVaultFile.Filename)}
-					}
+					// tea.SetClipboard sends the string to the user's laptop clipboard
+					return m, tea.SetClipboard(cmdStr)
 				}
 			}
 			return m, nil

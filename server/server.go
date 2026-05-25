@@ -13,13 +13,7 @@ func ServeGin(db *vault.Storage, masterKey []byte) {
 
 	r.MaxMultipartMemory = 8 << 20 // 8 MiB
 
-	r.POST("/upload", func(c *gin.Context) {
-		handleStreamingUpload(c, db, masterKey)
-	})
-
-	r.GET("/download/:id", func(c *gin.Context) {
-		handleStreamingDownload(c, db, masterKey)
-	})
+	addFileRoutes(r, db, masterKey)
 
 	fmt.Println("Server listening on :8080...")
 	if err := r.Run(":8080"); err != nil {
