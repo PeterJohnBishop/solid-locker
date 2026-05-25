@@ -13,6 +13,7 @@ import (
 	"github.com/peterjohnbishop/solid-locker/encryption"
 )
 
+// zero dependency function to generate a v4 uuid for file naming
 func GenerateUUIDv4() (string, error) {
 	b := make([]byte, 16)
 
@@ -20,10 +21,9 @@ func GenerateUUIDv4() (string, error) {
 		return "", fmt.Errorf("failed to generate random bytes: %w", err)
 	}
 
-	b[6] = (b[6] & 0x0f) | 0x40 // Set version to 4
-	b[8] = (b[8] & 0x3f) | 0x80 // Set variant to RFC 4122
+	b[6] = (b[6] & 0x0f) | 0x40
+	b[8] = (b[8] & 0x3f) | 0x80
 
-	// Format as a standard 36-character UUID string
 	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:]), nil
 }
 
@@ -69,21 +69,21 @@ func NewStorage(dbPath string) (*Storage, error) {
 	return &Storage{db: db}, nil
 }
 
-// CreateFileRecord initializes the parent row in the database so foreign keys don't fail.
+// initializes the parent row in the database so foreign keys don't fail.
 func (s *Storage) CreateFileRecord(ctx context.Context, fileID string, filename string) error {
 	query := "INSERT INTO files (id, filename) VALUES (?, ?)"
 	_, err := s.db.ExecContext(ctx, query, fileID, filename)
 	return err
 }
 
-// StoreSingleChunk satisfies the ChunkSaver interface.
+// satisfies the ChunkSaver interface.
 func (s *Storage) StoreSingleChunk(ctx context.Context, fileID string, index int, payload []byte) error {
 	query := "INSERT INTO file_chunks (file_id, chunk_index, encrypted_payload) VALUES (?, ?, ?)"
 	_, err := s.db.ExecContext(ctx, query, fileID, index, payload)
 	return err
 }
 
-// StreamEncryptAndStore reads from any stream, encrypts on the fly, and pushes straight to the DB.
+// reads from any stream, encrypts on the fly, and pushes straight to the DB.
 func StreamEncryptAndStore(ctx context.Context, reader io.Reader, chunkSize int, masterKey []byte, fileID string, db ChunkSaver) error {
 	buffer := make([]byte, chunkSize)
 	chunkIndex := 0
@@ -157,7 +157,50 @@ func (s *Storage) GetFilename(ctx context.Context, fileID string) (string, error
 	return filename, nil
 }
 
-// UploadLocalFile reads a file from disk, encrypts it, and stores it in SQLite
+// retrieves a list of all filenames stored in the database.
+func (s *Storage) GetAllFileNames(ctx context.Context) ([]string, error) {
+	rows, err := s.db.QueryContext(ctx, "SELECT filename FROM files")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var filenames []string
+	for rows.Next() {
+		var filename string
+		if err := rows.Scan(&filename); err != nil {
+			return nil, err
+		}
+		filenames = append(filenames, filename)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return filenames, nil
+}
+
+// removes a specific file record from the database based on its ID.
+func (s *Storage) DeleteByFileID(ctx context.Context, fileID string) error {
+	result, err := s.db.ExecContext(ctx, "DELETE FROM files WHERE id = ?", fileID)
+	if err != nil {
+		return err
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+
+	if rowsAffected == 0 {
+		return sql.ErrNoRows
+	}
+
+	return nil
+}
+
+// reads a file from disk, encrypts it, and stores it in SQLite
 func UploadLocalFile(ctx context.Context, filePath string, db *Storage, masterKey []byte) (string, error) {
 	file, err := os.Open(filePath)
 	if err != nil {
@@ -184,7 +227,7 @@ func UploadLocalFile(ctx context.Context, filePath string, db *Storage, masterKe
 	return fileID, nil
 }
 
-// DownloadLocalFile extracts a file from SQLite, decrypts it, and writes it to a local path
+// extracts a file from SQLite, decrypts it, and writes it to a local path
 func DownloadLocalFile(ctx context.Context, fileID string, outputDir string, db *Storage, masterKey []byte) error {
 	filename, err := db.GetFilename(ctx, fileID)
 	if err != nil {

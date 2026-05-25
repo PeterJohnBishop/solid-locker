@@ -18,7 +18,7 @@ func main() {
 	// generate a random 32-byte master key []byte
 	encryption.InitMasterKey()
 
-	db, err := vault.NewStorage("./locker.db")
+	db, err := vault.NewStorage("./db/locker.db")
 	if err != nil {
 		log.Fatalf("Failed to initialize storage: %v", err)
 	}
