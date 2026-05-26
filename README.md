@@ -5,8 +5,6 @@
 
 A context-aware TUI served over SSH providing server side encrypted upload/download to a SqLite database, and client side TUI to select and download files via SSH stream.
 
-Concurrently, a Gin server REST API provides upload and download endpoints for encrypted streamed upload and download.
-
 ![screenshot1](https://github.com/PeterJohnBishop/solid-locker/blob/main/assets/screen1.png?raw=true)
 
 From the localhost machine, the option to pick a file to upload to the file vault is availible. 
