@@ -17,6 +17,7 @@ The encrypted file is then listed in the vault contents.
 ![screenshot3](https://github.com/PeterJohnBishop/solid-locker/blob/main/assets/screen3.png?raw=true)
 
 And can be seen from the client side, and is availible for download. 
-Pressing 'd' automatically generates the ssh command to download the file, and adds it to your clipboard. 
+Pressing 'd' automatically generates the ssh command to download the file. 
+
 
 

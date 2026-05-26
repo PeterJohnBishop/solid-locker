@@ -26,6 +26,12 @@ var (
 			BorderForeground(lipgloss.Color("212")).
 			Padding(1, 2).
 			Margin(1, 2)
+
+	cmdBoxStyle = lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color("63")).
+			Padding(0, 1).
+			Margin(1, 0, 0, 2)
 )
 
 type model struct {
@@ -35,6 +41,7 @@ type model struct {
 	filepicker  filepicker.Model
 	cursor      int
 	message     string
+	downloadCmd string
 	showPicker  bool
 	isLocalhost bool
 }
@@ -102,6 +109,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		if !m.showPicker {
 			switch msg.String() {
+			case "esc":
+				m.downloadCmd = "" // Clear the command on escape
+				return m, nil
+
 			case "u":
 				if !m.isLocalhost {
 					return m, nil
@@ -110,31 +121,16 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 
 			case "down", "j":
+				m.downloadCmd = "" // Clear when moving cursor
 				if m.cursor < len(m.files)-1 {
 					m.cursor++
 				}
 			case "up", "k":
+				m.downloadCmd = "" // Clear when moving cursor
 				if m.cursor > 0 {
 					m.cursor--
 				}
 
-			// case "d":
-			// 	if len(m.files) > 0 {
-			// 		selectedVaultFile := m.files[m.cursor]
-			// 		m.message = fmt.Sprintf("Decrypting %s...", selectedVaultFile.Filename)
-
-			// 		return m, func() tea.Msg {
-			// 			ctx := context.Background()
-			// 			cwd, _ := os.Getwd()
-
-			// 			err := vault.DownloadLocalFile(ctx, selectedVaultFile.ID, cwd, m.storage, encryption.SaltMaster)
-			// 			if err != nil {
-			// 				return errorMsg{err}
-			// 			}
-
-			// 			return successMsg{fmt.Sprintf("Successfully extracted: %s", selectedVaultFile.Filename)}
-			// 		}
-			// 	}
 			case "d":
 				if len(m.files) > 0 {
 					selectedVaultFile := m.files[m.cursor]
@@ -145,10 +141,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						selectedVaultFile.Filename,
 					)
 
-					m.message = "Download command copied to your local clipboard!"
+					// Set the command in the model instead of the clipboard
+					m.downloadCmd = cmdStr
+					m.message = "Highlight and copy the command below:"
 
-					// tea.SetClipboard sends the string to the user's laptop clipboard
-					return m, tea.SetClipboard(cmdStr)
+					return m, nil
 				}
 			}
 			return m, nil
@@ -252,6 +249,12 @@ func (m model) View() tea.View {
 		b.WriteString("\n  (u: upload new file • d: extract selected • q: quit)\n")
 	} else {
 		b.WriteString("\n  (d: extract selected • q: quit)\n")
+	}
+
+	if m.downloadCmd != "" {
+		b.WriteString("\ndownload at:\n")
+		b.WriteString(cmdBoxStyle.Render(m.downloadCmd))
+		b.WriteString("\n")
 	}
 
 	return tea.NewView(b.String())
