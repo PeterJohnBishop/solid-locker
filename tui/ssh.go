@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net"
 	"os"
 	"os/signal"
 	"strings"
@@ -26,15 +27,22 @@ func StartSSHServer(storage *vault.Storage) {
 		fp.CurrentDirectory, _ = os.Getwd()
 		fp.SetHeight(7)
 
-		m := model{
-			storage:    storage,
-			filepicker: fp,
+		isLocalhost := false
+		if tcpAddr, ok := s.RemoteAddr().(*net.TCPAddr); ok {
+			isLocalhost = tcpAddr.IP.IsLoopback()
 		}
+
+		m := model{
+			storage:     storage,
+			filepicker:  fp,
+			isLocalhost: isLocalhost,
+		}
+
 		return m, nil
 	}
 
 	srv, err := wish.NewServer(
-		wish.WithAddress("0.0.0.0:23234"),
+		wish.WithAddress(":23234"),
 		wish.WithHostKeyPath(".ssh/id_ed25519"),
 		wish.WithMiddleware(
 			bm.Middleware(teaHandler),   // runs last

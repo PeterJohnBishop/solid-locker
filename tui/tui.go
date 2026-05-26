@@ -29,13 +29,14 @@ var (
 )
 
 type model struct {
-	storage    *vault.Storage
-	files      []vault.VaultFile
-	err        error
-	filepicker filepicker.Model
-	cursor     int
-	message    string
-	showPicker bool
+	storage     *vault.Storage
+	files       []vault.VaultFile
+	err         error
+	filepicker  filepicker.Model
+	cursor      int
+	message     string
+	showPicker  bool
+	isLocalhost bool
 }
 
 type filesFetchedMsg struct {
@@ -49,6 +50,12 @@ type successMsg struct {
 
 type errorMsg struct {
 	err error
+}
+
+func initialModel(isLocal bool) model {
+	return model{
+		isLocalhost: isLocal,
+	}
 }
 
 func (m model) Init() tea.Cmd {
@@ -96,6 +103,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if !m.showPicker {
 			switch msg.String() {
 			case "u":
+				if !m.isLocalhost {
+					return m, nil
+				}
 				m.showPicker = true
 				return m, nil
 
@@ -238,7 +248,11 @@ func (m model) View() tea.View {
 		}
 	}
 
-	b.WriteString("\n  (u: upload new file • d: extract selected • q: quit)\n")
+	if m.isLocalhost {
+		b.WriteString("\n  (u: upload new file • d: extract selected • q: quit)\n")
+	} else {
+		b.WriteString("\n  (d: extract selected • q: quit)\n")
+	}
 
 	return tea.NewView(b.String())
 }
