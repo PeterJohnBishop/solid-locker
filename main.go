@@ -5,7 +5,6 @@ import (
 
 	"github.com/joho/godotenv"
 	"github.com/peterjohnbishop/solid-locker/encryption"
-	"github.com/peterjohnbishop/solid-locker/server"
 	"github.com/peterjohnbishop/solid-locker/tui"
 	"github.com/peterjohnbishop/solid-locker/vault"
 )
@@ -26,9 +25,9 @@ func main() {
 	}
 
 	// serve gin
-	go func() {
-		server.ServeGin(db, encryption.SaltMaster)
-	}()
+	// go func() {
+	// 	server.ServeGin(db, encryption.SaltMaster)
+	// }()
 
 	// ssh
 	tui.StartSSHServer(db)

@@ -1,5 +1,8 @@
 # solid-locker
 
+
+## about
+
 A context-aware TUI served over SSH providing server side encrypted upload/download to a SqLite database, and client side TUI to select and download files via SSH stream.
 
 Concurrently, a Gin server REST API provides upload and download endpoints for encrypted streamed upload and download.
@@ -17,3 +20,5 @@ The encrypted file is then listed in the vault contents.
 
 And can be seen from the client side, and is availible for download. 
 Pressing 'd' automatically generates the ssh command to download the file, and adds it to your clipboard. 
+
+
